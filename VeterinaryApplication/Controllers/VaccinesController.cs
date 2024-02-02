@@ -1,27 +1,22 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using VeterinaryApplication.Data;
 using VeterinaryApplication.Models;
+using VeterinaryApplication.Services;
 
 namespace VeterinaryApplication.Controllers
 {
     public class VaccinesController : Controller
     {
-        private readonly ApplicationDbContext _context;
         private IMemoryCache _memoryCache;
+        private IVaccineService vaccineService;
 
-
-        public VaccinesController(ApplicationDbContext context, IMemoryCache memoryCache)
+        public VaccinesController(IVaccineService vaccineService, IMemoryCache memoryCache)
         {
-            _context = context;
-            _memoryCache = memoryCache;
+            this.vaccineService = vaccineService;
+            this._memoryCache = memoryCache;
 
         }
 
@@ -32,7 +27,7 @@ namespace VeterinaryApplication.Controllers
 
             if (!_memoryCache.TryGetValue("vaccines", out vaccines))
             {
-                vaccines = await _context.Vaccines.ToListAsync();
+                vaccines = vaccineService.GetAllWithInclude(x => x.Pets).ToList();
 
                 MemoryCacheEntryOptions cacheOptions = new MemoryCacheEntryOptions();
                 cacheOptions.SetPriority(CacheItemPriority.Low);
@@ -53,8 +48,8 @@ namespace VeterinaryApplication.Controllers
                 return NotFound();
             }
 
-            var vaccine = await _context.Vaccines
-                .FirstOrDefaultAsync(m => m.VaccineId == id);
+            var vaccine = vaccineService.GetAllWithInclude(x => x.Pets)
+                .FirstOrDefault(m => m.VaccineId == id);
             if (vaccine == null)
             {
                 return NotFound();
@@ -78,8 +73,8 @@ namespace VeterinaryApplication.Controllers
         {
             if (ModelState.IsValid)
             {
-                _context.Add(vaccine);
-                await _context.SaveChangesAsync();
+                vaccineService.Add(vaccine);
+                // await vaccineService.SaveChangesAsync();
                 _memoryCache.Remove("vaccines");
                 return RedirectToAction(nameof(Index));
             }
@@ -88,14 +83,14 @@ namespace VeterinaryApplication.Controllers
 
         // GET: Vaccines/Edit/5
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> Edit(int? id)
+        public async Task<IActionResult> Edit(int id)
         {
             if (id == null)
             {
                 return NotFound();
             }
 
-            var vaccine = await _context.Vaccines.FindAsync(id);
+            var vaccine = vaccineService.GetById(id);
             if (vaccine == null)
             {
                 return NotFound();
@@ -119,9 +114,9 @@ namespace VeterinaryApplication.Controllers
             {
                 try
                 {
-                    _context.Update(vaccine);
+                    vaccineService.Update(vaccine);
                     _memoryCache.Remove("vaccines");
-                    await _context.SaveChangesAsync();
+                    // await _context.SaveChangesAsync();
                 }
                 catch (DbUpdateConcurrencyException)
                 {
@@ -141,15 +136,18 @@ namespace VeterinaryApplication.Controllers
 
         // GET: Vaccines/Delete/5
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> Delete(int? id)
+        public async Task<IActionResult> Delete(int id)
         {
             if (id == null)
             {
                 return NotFound();
             }
 
-            var vaccine = await _context.Vaccines
-                .FirstOrDefaultAsync(m => m.VaccineId == id);
+            //var vaccine = await _context.Vaccines
+            //    .FirstOrDefaultAsync(m => m.VaccineId == id);
+
+            var vaccine = vaccineService.GetById(id);
+
             if (vaccine == null)
             {
                 return NotFound();
@@ -163,11 +161,11 @@ namespace VeterinaryApplication.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var vaccine = await _context.Vaccines.FindAsync(id);
+            var vaccine = vaccineService.GetById(id);
             if (vaccine != null)
             {
-                _context.Vaccines.Remove(vaccine);
-                await _context.SaveChangesAsync();
+                vaccineService.Delete(vaccine.VaccineId);
+                // await _context.SaveChangesAsync();
                 _memoryCache.Remove("vaccines");
             }
 
@@ -176,7 +174,12 @@ namespace VeterinaryApplication.Controllers
 
         private bool VaccineExists(int id)
         {
-            return _context.Vaccines.Any(e => e.VaccineId == id);
+            var vaccineExist = vaccineService.GetById(id);
+            if (vaccineExist == null)
+            {
+                return false;
+            }
+            return true;
         }
     }
 }

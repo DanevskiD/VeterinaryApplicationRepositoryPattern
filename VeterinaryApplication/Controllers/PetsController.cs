@@ -1,27 +1,24 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using System.Drawing;
 using VeterinaryApplication.Data;
 using VeterinaryApplication.Models;
+using VeterinaryApplication.Services;
 
 namespace VeterinaryApplication.Controllers
 {
     public class PetsController : Controller
     {
-        private readonly ApplicationDbContext _context;
         private IMemoryCache _memoryCache;
+        private IPetService petService;
 
-        public PetsController(ApplicationDbContext context, IMemoryCache memoryCache)
+        public PetsController(IPetService petService, IMemoryCache memoryCache)
         {
-            _context = context;
-            _memoryCache = memoryCache;
-
+            this.petService = petService;
+            this._memoryCache = memoryCache;
         }
 
         // GET: Pets
@@ -31,12 +28,16 @@ namespace VeterinaryApplication.Controllers
 
             if (!_memoryCache.TryGetValue("pets", out pets))
             {
-                   pets = await _context.Pets
-                        .Include(x => x.Vaccines)  
-                        .Include(x => x.Owner)     
-                        .ToListAsync();
+                /* pets = await _context.Pets
+                      .Include(x => x.Vaccines)  
+                      .Include(x => x.Owner)     
+                      .ToListAsync();
 
-                pets = await _context.Pets.Include(x=> x.Owner).ToListAsync();
+              pets = await _context.Pets.Include(x=> x.Owner).ToListAsync();*/
+                pets = petService.GetAllWithInclude(x => x.Owner).ToList();
+
+                pets = petService.GetAllWithInclude(v => v.Vaccines).ToList();
+
 
                 MemoryCacheEntryOptions cacheOptions = new MemoryCacheEntryOptions();
                 cacheOptions.SetPriority(CacheItemPriority.Low);
@@ -57,10 +58,16 @@ namespace VeterinaryApplication.Controllers
                 return NotFound();
             }
 
-            var pet = await _context.Pets
-                .Include(p => p.Owner)
-                .Include(p => p.Vaccines)
-                .FirstOrDefaultAsync(m => m.PetId == id);
+            /* var pet = await _context.Pets
+                 .Include(p => p.Owner)
+                 .Include(p => p.Vaccines)
+                 .FirstOrDefaultAsync(m => m.PetId == id);*/
+
+            var pets = petService.GetAllWithInclude(x => x.Owner);
+            pets = petService.GetAllWithInclude(v => v.Vaccines).ToList();
+
+            var pet = petService.GetAllWithInclude(x => x.Vaccines)
+                .FirstOrDefault(m => m.PetId == id);
             if (pet == null)
             {
                 return NotFound();
@@ -72,8 +79,8 @@ namespace VeterinaryApplication.Controllers
         // GET: Pets/Create
         public IActionResult Create()
         {
-            ViewData["OwnerId"] = new SelectList(_context.Owners, "OwnerId", "FirstName");
-            ViewData["VaccineId"] = new MultiSelectList(_context.Vaccines, "VaccineId", "Name");
+            /* ViewData["OwnerId"] = new SelectList(_context.Owners, "OwnerId", "FirstName");
+             ViewData["VaccineId"] = new MultiSelectList(_context.Vaccines, "VaccineId", "Name");*/
 
             return View();
         }
@@ -87,16 +94,17 @@ namespace VeterinaryApplication.Controllers
         {
             if (ModelState.IsValid)
             {
-                pet.Vaccines = _context.Vaccines.Where(x => pet.VaccinesParams.Contains(x.VaccineId)).ToList();
+                /*  pet.Vaccines = _context.Vaccines.Where(x => pet.VaccinesParams.Contains(x.VaccineId)).ToList();
 
-                _context.Add(pet);
-                await _context.SaveChangesAsync();
+                  _context.Add(pet);
+                  await _context.SaveChangesAsync();*/
+                petService.Add(pet);
                 _memoryCache.Remove("pets");
                 return RedirectToAction(nameof(Index));
 
             }
-            ViewData["OwnerId"] = new SelectList(_context.Owners, "OwnerId", "FirstName", pet.OwnerId);
-            ViewData["VaccineId"] = new MultiSelectList(_context.Vaccines, "VaccineId", "Name", pet.VaccinesParams);
+            /*  ViewData["OwnerId"] = new SelectList(_context.Owners, "OwnerId", "FirstName", pet.OwnerId);
+              ViewData["VaccineId"] = new MultiSelectList(_context.Vaccines, "VaccineId", "Name", pet.VaccinesParams);*/
 
             return View(pet);
         }
@@ -104,22 +112,30 @@ namespace VeterinaryApplication.Controllers
         // GET: Pets/Edit/5
         [Authorize(Roles = "Admin")]
 
-        public async Task<IActionResult> Edit(int? id)
+        public async Task<IActionResult> Edit(int id)
         {
             if (id == null)
             {
                 return NotFound();
             }
 
-            var pet = await _context.Pets
-                .Include(x => x.Vaccines)
-                .FirstOrDefaultAsync(x => x.PetId == id);
+            /* var pet = await _context.Pets
+                 .Include(x => x.Vaccines)
+                 .FirstOrDefaultAsync(x => x.PetId == id);*/
+
+            // New  implementation to be tested.
+            //var pet = petService
+            //    .GetAllWithInclude(v => v.Vaccines).ToList()
+            //.Where(p => p.PetId == id);
+
+            var pet = petService.GetById(id);
+
             if (pet == null)
             {
                 return NotFound();
             }
-            ViewData["OwnerId"] = new SelectList(_context.Owners, "OwnerId", "FirstName", pet.OwnerId);
-            ViewData["VaccineId"] = new MultiSelectList(_context.Vaccines, "VaccineId", "Name", pet.Vaccines.Select(x => x.VaccineId));
+            /* ViewData["OwnerId"] = new SelectList(_context.Owners, "OwnerId", "FirstName", pet.OwnerId);
+             ViewData["VaccineId"] = new MultiSelectList(_context.Vaccines, "VaccineId", "Name", pet.Vaccines.Select(x => x.VaccineId));*/
 
 
             return View(pet);
@@ -140,29 +156,32 @@ namespace VeterinaryApplication.Controllers
             if (ModelState.IsValid)
             {
                 try
-                {               
-                    var existingPet = await _context.Pets
-                        .Include(p => p.Vaccines)
-                        .FirstOrDefaultAsync(p => p.PetId == id);
+                {
+                    /* var existingPet = await _context.Pets
+                         .Include(p => p.Vaccines)
+                         .FirstOrDefaultAsync(p => p.PetId == id);
 
-                    if (existingPet == null)
-                    {
-                        return NotFound();
-                    }
+                     if (existingPet == null)
+                     {
+                         return NotFound();
+                     }
 
-                    existingPet.Name = pet.Name;
-                    existingPet.Age = pet.Age;
-                    existingPet.OwnerId = pet.OwnerId;
+                     existingPet.Name = pet.Name;
+                     existingPet.Age = pet.Age;
+                     existingPet.OwnerId = pet.OwnerId;
 
-                    existingPet.Vaccines = _context.Vaccines
-                        .Where(v => pet.VaccinesParams.Contains(v.VaccineId))
-                        .ToList();
+                     existingPet.Vaccines = _context.Vaccines
+                         .Where(v => pet.VaccinesParams.Contains(v.VaccineId))
+                         .ToList();
 
-                    _context.Update(existingPet);
+                     _context.Update(existingPet);
+                     _memoryCache.Remove("pets");
+                     await _context.SaveChangesAsync();
+
+                    return RedirectToAction(nameof(Index));*/
+
+                    petService.Update(pet);
                     _memoryCache.Remove("pets");
-                    await _context.SaveChangesAsync();
-
-                    return RedirectToAction(nameof(Index));
                 }
                 catch (DbUpdateConcurrencyException)
                 {
@@ -175,11 +194,12 @@ namespace VeterinaryApplication.Controllers
                         throw;
                     }
                 }
+                return RedirectToAction(nameof(Index));
             }
 
             // Populate ViewData for dropdowns
-            ViewData["OwnerId"] = new SelectList(_context.Owners, "OwnerId", "FirstName", pet.OwnerId);
-            ViewData["VaccineId"] = new MultiSelectList(_context.Vaccines, "VaccineId", "Name", pet.VaccinesParams);
+            /* ViewData["OwnerId"] = new SelectList(_context.Owners, "OwnerId", "FirstName", pet.OwnerId);
+             ViewData["VaccineId"] = new MultiSelectList(_context.Vaccines, "VaccineId", "Name", pet.VaccinesParams);*/
 
             // Return the view with the modified pet
             return View(pet);
@@ -187,16 +207,19 @@ namespace VeterinaryApplication.Controllers
 
         // GET: Pets/Delete/5
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> Delete(int? id)
+        public async Task<IActionResult> Delete(int id)
         {
             if (id == null)
             {
                 return NotFound();
             }
 
-            var pet = await _context.Pets
+            /*var pet = await _context.Pets
                 .Include(p => p.Owner)
-                .FirstOrDefaultAsync(m => m.PetId == id);
+                .FirstOrDefaultAsync(m => m.PetId == id);*/
+
+            var pet = petService.GetById(id);
+
             if (pet == null)
             {
                 return NotFound();
@@ -210,11 +233,14 @@ namespace VeterinaryApplication.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var pet = await _context.Pets.FindAsync(id);
+            //var pet = await _context.Pets.FindAsync(id);
+            var pet = petService.GetById(id);
             if (pet != null)
             {
-                _context.Pets.Remove(pet);
-                await _context.SaveChangesAsync();
+                /* _context.Pets.Remove(pet);
+                 await _context.SaveChangesAsync();*/
+
+                petService.Delete(pet.PetId);
                 _memoryCache.Remove("pets");
             }
 
@@ -223,7 +249,14 @@ namespace VeterinaryApplication.Controllers
 
         private bool PetExists(int id)
         {
-            return _context.Pets.Any(e => e.PetId == id);
+            // return _context.Pets.Any(e => e.PetId == id);
+
+            var petExist = petService.GetById(id);
+            if (petExist == null)
+            {
+                return false;
+            }
+            return true;
         }
     }
 }

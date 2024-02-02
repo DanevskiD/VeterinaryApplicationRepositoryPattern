@@ -22,6 +22,8 @@ builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.Requ
 
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 builder.Services.AddScoped<IOwnerService, OwnerService>();
+builder.Services.AddScoped<IPetService, PetService>();
+builder.Services.AddScoped<IVaccineService, VaccineService>();
 
 builder.Services.AddAuthorization(options =>
 {

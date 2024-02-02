@@ -30,9 +30,8 @@ namespace VeterinaryApplication.Controllers
 
                 if (!_memoryCache.TryGetValue("owners", out owners))
                 {
-                    owners = ownerService.GetAllWithInclude(x => x.Pets).ToList();
-
-
+                    owners = ownerService
+                        .GetAllWithInclude(x => x.Pets).ToList();
 
                     MemoryCacheEntryOptions cacheOptions = new MemoryCacheEntryOptions();
                     cacheOptions.SetPriority(CacheItemPriority.Low);
